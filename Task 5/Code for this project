@@ -1,53 +1,46 @@
-#include <Wire.h>        // I2C Library for LCD
-#include <LiquidCrystal_I2C.h>  // I2C LCD Library
+#include <ch32v00x.h>
+#include <debug.h>
 
-#define TRIG_PIN 1  // PA1 for Ultrasonic Trigger
-#define ECHO_PIN 2  // PA2 for Ultrasonic Echo
+// Define GPIO pins
+#define IR_SENSOR_PIN GPIO_Pin_2  // IR sensor on PD2
+#define BUZZER_PIN GPIO_Pin_3     // Buzzer/LED on PD3
 
-LiquidCrystal_I2C lcd(0x27, 16, 2);  // LCD I2C Address (0x27 or 0x3F)
+// GPIO Configuration Function
+void GPIO_Config(void)
+{
+    GPIO_InitTypeDef GPIO_InitStructure = {0};
 
-void setup() {
-    pinMode(TRIG_PIN, OUTPUT);
-    pinMode(ECHO_PIN, INPUT);
-    Wire.begin(PA1, PA2);  // Initialize I2C with PA1 (SDA) & PA2 (SCL)
-    lcd.begin(16, 2);
-    lcd.backlight();
-    lcd.print("System Ready");
-    delay(2000);
-    lcd.clear();
+    RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOD, ENABLE); // Enable clock for GPIOD
+
+    // Configure PD2 as input (IR Sensor) with pull-up
+    GPIO_InitStructure.GPIO_Pin = IR_SENSOR_PIN;
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IPU; // Input with Internal Pull-Up
+    GPIO_Init(GPIOD, &GPIO_InitStructure);
+
+    // Configure PD3 as output (Buzzer/LED)
+    GPIO_InitStructure.GPIO_Pin = BUZZER_PIN;
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP; // Push-Pull Output
+    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+    GPIO_Init(GPIOD, &GPIO_InitStructure);
 }
 
-void loop() {
-    long duration;
-    float distance;
+// Main function
+int main(void)
+{
+    SystemCoreClockUpdate(); // Update System Clock
+    Delay_Init();            // Initialize delay functions
+    GPIO_Config();           // Configure GPIO
 
-    // Send trigger pulse
-    digitalWrite(TRIG_PIN, LOW);
-    delayMicroseconds(2);
-    digitalWrite(TRIG_PIN, HIGH);
-    delayMicroseconds(10);
-    digitalWrite(TRIG_PIN, LOW);
-
-    // Read echo pulse duration
-    duration = pulseIn(ECHO_PIN, HIGH);
-    
-    // Convert to distance (Speed of Sound = 343m/s)
-    distance = (duration * 0.0343) / 2;
-
-    // Display distance on LCD
-    lcd.setCursor(0, 0);
-    lcd.print("Distance: ");
-    lcd.print(distance);
-    lcd.print(" cm  ");
-
-    // Check for danger zone
-    if (distance < 10) {  
-        lcd.setCursor(0, 1);
-        lcd.print("DANGER!!!");
-    } else {
-        lcd.setCursor(0, 1);
-        lcd.print("SAFE       ");  // Clear previous message
+    while (1)
+    {
+        if (GPIO_ReadInputDataBit(GPIOD, IR_SENSOR_PIN) == 0) // IR Sensor detects motion (active-low)
+        {
+            GPIO_SetBits(GPIOD, BUZZER_PIN); // Turn ON buzzer/LED
+            Delay_Ms(200);  // Small delay to avoid rapid switching
+        }
+        else
+        {
+            GPIO_ResetBits(GPIOD, BUZZER_PIN); // Turn OFF buzzer/LED
+        }
     }
-
-    delay(500);  // Update every 500ms
 }
